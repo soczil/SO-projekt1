@@ -56,8 +56,8 @@ global _start
   xor ebx, ebx
 %%buff_loop:
   movzx ebp, byte [buffer + ebx]
-  test bpl, bpl
-  jz %%exit
+  cmp rbx, rax
+  je %%exit
   cmp bpl, 10
   je %%end_loop
   call check_sign
@@ -83,6 +83,20 @@ global _start
   mov byte [buffer + ebx], bpl
   inc ebx
   jmp %%buff_loop
+%%exit:
+%endmacro
+
+%macro CHECK_T_PERMUTATION 0
+  mov rsi, '1'
+  mov r14, [rsp + 8 * 4]
+%%perm_loop:
+  cmp rsi, 'Z'
+  ja %%exit
+  mov rcx, [r14 + rsi - '1']
+  cmp rsi, [r14 + rcx - '1']
+  jne error_exit
+  inc rsi
+  jmp %%perm_loop
 %%exit:
 %endmacro
 
@@ -128,10 +142,10 @@ q_shift_rev:
 reverse_perm:
   mov r8b, lower_edge
   mov rsi, r14
-arg_loop:
+.arg_loop:
   mov bpl, byte [rsi]
   test bpl, bpl
-  jz end
+  jz .end
   call check_sign
   sub bpl, lower_edge
   cmp byte [r15 + rbp], 0
@@ -139,8 +153,8 @@ arg_loop:
   mov [r15 + rbp], r8b
   inc rsi
   inc r8b
-  jmp arg_loop
-end:
+  jmp .arg_loop
+.end:
   cld
   xor al, al
   mov ecx, 42
@@ -168,6 +182,7 @@ _start:
   mov r14, [rsp + 8 * 4]
   lea r15, [perm_t]
   call reverse_perm
+  ;CHECK_T_PERMUTATION
 last_arg:
   mov rsi, [rsp + 8 * 5]
   mov bpl, [rsi]
