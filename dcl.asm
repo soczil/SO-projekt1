@@ -17,40 +17,6 @@ global _start
   syscall
 %endmacro
 
-; Sprawdza, czy znak podany jako argument jest znakiem dozwolonym.
-%macro CHECK_SIGN 1
-  cmp %1, lower_edge
-  jb error_exit
-  cmp %1, upper_edge
-  ja error_exit
-%endmacro
-
-%macro REVERSE_PERM 2
-  mov r8b, lower_edge
-  mov rsi, %1
-%%arg_loop:
-  mov bl, byte [rsi]
-  test bl, bl
-  jz %%end
-  CHECK_SIGN bl
-  sub bl, lower_edge
-  cmp byte [%2 + ebx], 0
-  jne error_exit
-  mov byte [%2 + ebx], r8b
-  inc rsi
-  inc r8b
-  jmp %%arg_loop
-%%end:
-  cld
-  xor al, al
-  mov ecx, 42
-  mov rdi, %2
-  repne scasb
-  sub rdi, %2
-  cmp rdi, 42
-  jne error_exit
-%endmacro
-
 %macro READ_INPUT 0
   mov rax, SYS_READ
   mov rdi, STDIN
@@ -69,30 +35,8 @@ global _start
 %%exit:
 %endmacro
 
-%macro Q_SHIFT 1
-  add al, %1
-  cmp al, upper_edge
-  ja %%fix
-  jmp %%exit
-%%fix:
-  sub al, upper_edge
-  add al, '0'
-%%exit:
-%endmacro
-
-%macro Q_SHIFT_REV 1
-  sub al, %1
-  cmp al, lower_edge
-  jb %%fix
-  jmp %%exit
-%%fix:
-  sub al, '0'
-  add al, upper_edge
-%%exit:
-%endmacro
-
 %macro PERMUT 1
-  movzx eax, byte [%1 + rax - '1']
+  movzx ebp, byte [%1 + rbp - '1']
 %endmacro
 
 %macro CHECK_CYCLE_POINTS 0
@@ -108,42 +52,35 @@ global _start
 %%exit:
 %endmacro
 
-%macro PRINT_JOL 0
-  mov [jol], rax
-  mov rsi, jol
-  mov rax, 1
-  mov rdi, 1
-  mov rdx, 1
-  syscall
-  mov rax, jol
-%endmacro
-
 %macro CYPHER 0
   xor ebx, ebx
 %%buff_loop:
-  movzx eax, byte [buffer + ebx]
-  test al, al
+  movzx ebp, byte [buffer + ebx]
+  test bpl, bpl
   jz %%exit
-  cmp al, 10
+  cmp bpl, 10
   je %%end_loop
-  CHECK_SIGN al
+  call check_sign
   INC_MOD byte [r]
   CHECK_CYCLE_POINTS
-  Q_SHIFT [r]
+  mov r12B, byte [r]
+  call q_shift
   PERMUT r14
-  Q_SHIFT_REV [r]
-  Q_SHIFT [l]
+  call q_shift_rev
+  mov r12B, byte [l]
+  call q_shift
   PERMUT r13
-  Q_SHIFT_REV [l]
+  call q_shift_rev
   PERMUT r15
-  Q_SHIFT [l]
+  call q_shift
   PERMUT perm_l
-  Q_SHIFT_REV [l]
-  Q_SHIFT [r]
+  call q_shift_rev
+  mov r12B, byte [r]
+  call q_shift
   PERMUT perm_r
-  Q_SHIFT_REV [r]
+  call q_shift_rev
 %%end_loop:
-  mov byte [buffer + ebx], al
+  mov byte [buffer + ebx], bpl
   inc ebx
   jmp %%buff_loop
 %%exit:
@@ -168,31 +105,88 @@ section .data
   perm_t: times 42 db 0
 
 section .text
+q_shift:
+  add bpl, r12B
+  cmp bpl, upper_edge
+  ja .fix
+  jmp .exit
+.fix:
+  sub bpl, upper_edge
+  add bpl, '0'
+.exit:
+  ret
+q_shift_rev:
+  sub bpl, r12B
+  cmp bpl, lower_edge
+  jb .fix
+  jmp .exit
+.fix:
+  sub bpl, '0'
+  add bpl, upper_edge
+.exit:
+  ret
+reverse_perm:
+  mov r8b, lower_edge
+  mov rsi, r14
+arg_loop:
+  mov bpl, byte [rsi]
+  test bpl, bpl
+  jz end
+  call check_sign
+  sub bpl, lower_edge
+  cmp byte [r15 + rbp], 0
+  jne error_exit
+  mov [r15 + rbp], r8b
+  inc rsi
+  inc r8b
+  jmp arg_loop
+end:
+  cld
+  xor al, al
+  mov ecx, 42
+  mov rdi, r15
+  repne scasb
+  sub rdi, r15
+  cmp rdi, 42
+  jne error_exit
+  ret
+check_sign:
+  cmp bpl, lower_edge
+  jb error_exit
+  cmp bpl, upper_edge
+  ja error_exit
+  ret
 _start:
   cmp byte [rsp], correct_argc          
   jne error_exit      ; Błędna liczba parametrów.
-  REVERSE_PERM [rsp + 8 * 2], perm_l
-  REVERSE_PERM [rsp + 8 * 3], perm_r
-  REVERSE_PERM [rsp + 8 * 4], perm_t
+  mov r14, [rsp + 8 * 2]
+  lea r15, [perm_l]
+  call reverse_perm
+  mov r14, [rsp + 8 * 3]
+  lea r15, [perm_r]
+  call reverse_perm
+  mov r14, [rsp + 8 * 4]
+  lea r15, [perm_t]
+  call reverse_perm
 last_arg:
   mov rsi, [rsp + 8 * 5]
-  mov cl, [rsi]
-  mov [l], cl
-  mov cl, [rsi + 1]
-  mov [r], cl
-  CHECK_SIGN byte [l]
-  CHECK_SIGN byte [r]
+  mov bpl, [rsi]
+  call check_sign
+  mov [l], bpl
+  mov bpl, [rsi + 1]
+  call check_sign
+  mov [r], bpl
   sub byte [l], lower_edge
   sub byte [r], lower_edge
   cmp byte [rsi + 2], 0
   jne error_exit
+  mov r13, [rsp + 8 * 2] ; wskaźnik na permutację L
+  mov r14, [rsp + 8 * 3] ; wskaźnik na permutację R
+  mov r15, [rsp + 8 * 4] ; wskaźnik na permutację T
 io_loop:
   READ_INPUT
   test rax, rax
   jz exit
-  mov r13, [rsp + 8 * 2] ; wskaźnik na permutację L
-  mov r14, [rsp + 8 * 3] ; wskaźnik na permutację R
-  mov r15, [rsp + 8 * 4] ; wskaźnik na permutację T
   CYPHER
   PRINT buffer, rbx
   jmp io_loop
