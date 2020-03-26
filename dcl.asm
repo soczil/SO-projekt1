@@ -1,8 +1,11 @@
-SYS_READ  equ 0
-SYS_WRITE equ 1
-SYS_EXIT  equ 60
-STDIN     equ 0
-STDOUT    equ 1
+SYS_READ    equ 0
+SYS_WRITE   equ 1
+SYS_EXIT    equ 60
+STDIN       equ 0
+STDOUT      equ 1
+ARGC        equ 5
+LOWER_BOUND equ 49 
+UPPER_BOUND equ 90
 
 ; Wykonanie programu zaczyna się od etyiety _start.
 global _start
@@ -17,6 +20,7 @@ global _start
   syscall
 %endmacro
 
+; Czyta ze standardowego wejścia.
 %macro READ_INPUT 0
   mov rax, SYS_READ
   mov rdi, STDIN
@@ -26,17 +30,13 @@ global _start
 %endmacro
 
 %macro INC_MOD 1
-  inc %1 ; dokonczyc
+  inc %1
   cmp %1, 41
   ja %%fix
   jmp %%exit
 %%fix:
   mov %1, 0
 %%exit:
-%endmacro
-
-%macro PERMUT 1
-  movzx ebp, byte [%1 + rbp - '1']
 %endmacro
 
 %macro CHECK_CYCLE_POINTS 0
@@ -65,19 +65,19 @@ global _start
   CHECK_CYCLE_POINTS
   mov r12B, byte [r]
   call q_shift
-  PERMUT r14
+  movzx ebp, byte [r14 + rbp - '1']
   call q_shift_rev
   mov r12B, byte [l]
   call q_shift
-  PERMUT r13
+  movzx ebp, byte [r13 + rbp - '1']
   call q_shift_rev
-  PERMUT r15
+  movzx ebp, byte [r15 + rbp - '1']
   call q_shift
-  PERMUT perm_l
+  movzx ebp, byte [rev_L + rbp - '1']
   call q_shift_rev
   mov r12B, byte [r]
   call q_shift
-  PERMUT perm_r
+  movzx ebp, byte [rev_R + rbp - '1']
   call q_shift_rev
 %%end_loop:
   mov byte [buffer + ebx], bpl
@@ -87,67 +87,58 @@ global _start
 %endmacro
 
 %macro CHECK_T_PERMUTATION 0
-  mov rsi, '1'
-  mov r14, [rsp + 8 * 4]
-%%perm_loop:
-  cmp rsi, 'Z'
+  xor rsi, rsi
+  mov sil, '1'
+%%rev_Loop:
+  cmp sil, 'Z'
   ja %%exit
-  mov rcx, [r14 + rsi - '1']
-  cmp rsi, [r14 + rcx - '1']
+  movzx rcx, byte [r14 + rsi - '1']
+  cmp sil, byte [r14 + rcx - '1']
   jne error_exit
-  inc rsi
-  jmp %%perm_loop
+  inc sil
+  jmp %%rev_Loop
 %%exit:
 %endmacro
-
-section .rodata
-  new_line db `\n`
 
 section .bss
   buffer: resb 4096
   l:      resb 1
   r:      resb 1
   jol:    resb 1
-
-section .data
-  ; Poprawna liczba argumentów to 4, ale jeszcze nazwa programu.
-  correct_argc     equ 5
-  lower_edge       equ 49 
-  upper_edge       equ 90
-  perm_l: times 42 db 0
-  perm_r: times 42 db 0
-  perm_t: times 42 db 0
+  rev_L:  resb 42
+  rev_R:  resb 42
+  rev_T:  resb 42
 
 section .text
 q_shift:
   add bpl, r12B
-  cmp bpl, upper_edge
+  cmp bpl, UPPER_BOUND
   ja .fix
   jmp .exit
 .fix:
-  sub bpl, upper_edge
+  sub bpl, UPPER_BOUND
   add bpl, '0'
 .exit:
   ret
 q_shift_rev:
   sub bpl, r12B
-  cmp bpl, lower_edge
+  cmp bpl, LOWER_BOUND
   jb .fix
   jmp .exit
 .fix:
   sub bpl, '0'
-  add bpl, upper_edge
+  add bpl, UPPER_BOUND
 .exit:
   ret
 reverse_perm:
-  mov r8b, lower_edge
+  mov r8b, LOWER_BOUND
   mov rsi, r14
 .arg_loop:
   mov bpl, byte [rsi]
   test bpl, bpl
   jz .end
   call check_sign
-  sub bpl, lower_edge
+  sub bpl, LOWER_BOUND
   cmp byte [r15 + rbp], 0
   jne error_exit
   mov [r15 + rbp], r8b
@@ -164,25 +155,28 @@ reverse_perm:
   cmp rdi, 42
   jne error_exit
   ret
+zero_perm:
+  cld
+  rep stosb
 check_sign:
-  cmp bpl, lower_edge
+  cmp bpl, LOWER_BOUND
   jb error_exit
-  cmp bpl, upper_edge
+  cmp bpl, UPPER_BOUND
   ja error_exit
   ret
 _start:
-  cmp byte [rsp], correct_argc          
+  cmp byte [rsp], ARGC          
   jne error_exit      ; Błędna liczba parametrów.
   mov r14, [rsp + 8 * 2]
-  lea r15, [perm_l]
+  lea r15, [rev_L]
   call reverse_perm
   mov r14, [rsp + 8 * 3]
-  lea r15, [perm_r]
+  lea r15, [rev_R]
   call reverse_perm
   mov r14, [rsp + 8 * 4]
-  lea r15, [perm_t]
+  lea r15, [rev_T]
   call reverse_perm
-  ;CHECK_T_PERMUTATION
+  CHECK_T_PERMUTATION
 last_arg:
   mov rsi, [rsp + 8 * 5]
   mov bpl, [rsi]
@@ -191,8 +185,8 @@ last_arg:
   mov bpl, [rsi + 1]
   call check_sign
   mov [r], bpl
-  sub byte [l], lower_edge
-  sub byte [r], lower_edge
+  sub byte [l], LOWER_BOUND
+  sub byte [r], LOWER_BOUND
   cmp byte [rsi + 2], 0
   jne error_exit
   mov r13, [rsp + 8 * 2] ; wskaźnik na permutację L
