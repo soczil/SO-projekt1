@@ -14,16 +14,16 @@ global _start
 ; Drugi argument to ilość bajtów do wypisania.
 %macro PRINT 2
   mov rsi, %1
-  mov rax, SYS_WRITE
-  mov rdi, STDOUT
+  mov eax, SYS_WRITE
+  mov edi, STDOUT
   mov rdx, %2
   syscall
 %endmacro
 
 ; Czyta ze standardowego wejścia.
 %macro READ_INPUT 0
-  mov rax, SYS_READ
-  mov rdi, STDIN
+  mov eax, SYS_READ
+  mov edi, STDIN
   mov rsi, buffer
   mov rdx, 4096
   syscall
@@ -87,11 +87,13 @@ global _start
 %endmacro
 
 %macro CHECK_T_PERMUTATION 0
-  xor rsi, rsi
+  xor esi, esi
   mov sil, '1'
 %%rev_Loop:
   cmp sil, 'Z'
   ja %%exit
+  cmp sil, byte [r14 + rsi - '1']
+  je error_exit
   movzx rcx, byte [r14 + rsi - '1']
   cmp sil, byte [r14 + rcx - '1']
   jne error_exit
@@ -130,11 +132,10 @@ q_shift_rev:
   add bpl, UPPER_BOUND
 .exit:
   ret
-reverse_perm:
+reverse_perm: ; zmiana
   mov r8b, LOWER_BOUND
-  mov rsi, r14
 .arg_loop:
-  mov bpl, byte [rsi]
+  mov bpl, byte [r14 + r8 - '1']
   test bpl, bpl
   jz .end
   call check_sign
@@ -142,7 +143,6 @@ reverse_perm:
   cmp byte [r15 + rbp], 0
   jne error_exit
   mov [r15 + rbp], r8b
-  inc rsi
   inc r8b
   jmp .arg_loop
 .end:
@@ -179,7 +179,7 @@ _start:
   CHECK_T_PERMUTATION
 last_arg:
   mov rsi, [rsp + 8 * 5]
-  mov bpl, [rsi]
+  mov bpl, byte [rsi]
   call check_sign
   mov [l], bpl
   mov bpl, [rsi + 1]
@@ -200,10 +200,10 @@ io_loop:
   PRINT buffer, rbx
   jmp io_loop
 error_exit:
-  mov rax, SYS_EXIT
-  mov rdi, 1
+  mov eax, SYS_EXIT
+  mov edi, 1
   syscall
 exit:
   mov rax, SYS_EXIT
-  mov rdi, 0
+  xor edi, edi
   syscall
