@@ -1,3 +1,4 @@
+
 SYS_READ    equ 0
 SYS_WRITE   equ 1
 SYS_EXIT    equ 60
@@ -29,26 +30,18 @@ global _start
   syscall
 %endmacro
 
-%macro INC_MOD 1
-  inc %1
-  cmp %1, 41
-  ja %%fix
-  jmp %%exit
-%%fix:
-  mov %1, 0
-%%exit:
-%endmacro
-
 %macro CHECK_CYCLE_POINTS 0
-  cmp byte [r], 27
+  cmp r11b, 27
   je %%inc_l
-  cmp byte [r], 33
+  cmp r11b, 33
   je %%inc_l
-  cmp byte [r], 35
+  cmp r11b, 35
   je %%inc_l
   jmp %%exit
 %%inc_l:
-  INC_MOD byte [l]
+  inc r10b
+  cmp r10b, 41
+  cmova r10d, r9d
 %%exit:
 %endmacro
 
@@ -61,13 +54,15 @@ global _start
   cmp bpl, 10
   je %%end_loop
   call check_sign
-  INC_MOD byte [r]
+  inc r11b
+  cmp r11b, 41
+  cmova r11d, r9d
   CHECK_CYCLE_POINTS
-  mov r12B, byte [r]
+  mov r12b, r11b
   call q_shift
   movzx ebp, byte [r14 + rbp - '1']
   call q_shift_rev
-  mov r12B, byte [l]
+  mov r12b, r10b
   call q_shift
   movzx ebp, byte [r13 + rbp - '1']
   call q_shift_rev
@@ -75,7 +70,7 @@ global _start
   call q_shift
   movzx ebp, byte [rev_L + rbp - '1']
   call q_shift_rev
-  mov r12B, byte [r]
+  mov r12b, r11b
   call q_shift
   movzx ebp, byte [rev_R + rbp - '1']
   call q_shift_rev
@@ -104,33 +99,24 @@ global _start
 
 section .bss
   buffer: resb 4096
-  l:      resb 1
-  r:      resb 1
-  jol:    resb 1
   rev_L:  resb 42
   rev_R:  resb 42
   rev_T:  resb 42
 
 section .text
 q_shift:
-  add bpl, r12B
+  add bpl, r12b
+  mov ecx, ebp
+  sub ecx, 42
   cmp bpl, UPPER_BOUND
-  ja .fix
-  jmp .exit
-.fix:
-  sub bpl, UPPER_BOUND
-  add bpl, '0'
-.exit:
+  cmova ebp, ecx
   ret
 q_shift_rev:
-  sub bpl, r12B
+  sub bpl, r12b
+  mov ecx, ebp
+  add ecx, 42
   cmp bpl, LOWER_BOUND
-  jb .fix
-  jmp .exit
-.fix:
-  sub bpl, '0'
-  add bpl, UPPER_BOUND
-.exit:
+  cmovb ebp, ecx
   ret
 reverse_perm: ; zmiana
   mov r8b, LOWER_BOUND
@@ -155,9 +141,6 @@ reverse_perm: ; zmiana
   cmp rdi, 42
   jne error_exit
   ret
-zero_perm:
-  cld
-  rep stosb
 check_sign:
   cmp bpl, LOWER_BOUND
   jb error_exit
@@ -181,12 +164,12 @@ last_arg:
   mov rsi, [rsp + 8 * 5]
   mov bpl, byte [rsi]
   call check_sign
-  mov [l], bpl
+  mov r10b, bpl
   mov bpl, [rsi + 1]
   call check_sign
-  mov [r], bpl
-  sub byte [l], LOWER_BOUND
-  sub byte [r], LOWER_BOUND
+  mov r11b, bpl
+  sub r10b, LOWER_BOUND
+  sub r11b, LOWER_BOUND
   cmp byte [rsi + 2], 0
   jne error_exit
   mov r13, [rsp + 8 * 2] ; wskaźnik na permutację L
@@ -204,6 +187,6 @@ error_exit:
   mov edi, 1
   syscall
 exit:
-  mov rax, SYS_EXIT
+  mov eax, SYS_EXIT
   xor edi, edi
   syscall
