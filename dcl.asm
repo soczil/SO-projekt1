@@ -139,14 +139,8 @@ reverse_perm: ; Sprawdza poprawność permutacji, której adres jest w r14 i zap
   inc r8d
   jmp .arg_loop
 .end:
-  cld
-  xor al, al   ; Szukaj zera.
-  mov ecx, REAL_PERM_LEN  ; Ogranicz przeszukiwanie do 43 znaków.
-  mov rdi, r15 ; Ustaw adres, od którego rozpocząć szukanie.
-  repne scasb  ; Szukaj bajtu o wartości 0.
-  sub rdi, r15
-  cmp rdi, REAL_PERM_LEN
-  jne error_exit ; Permutacja nie ma 42 znaków.
+  cmp r8d, UPPER_BOUND
+  jbe error_exit
   ret
 check_sign: ; Sprawdza, czy znak w rejestrze ebp jest dozwolonym znakiem.
   cmp ebp, LOWER_BOUND
