@@ -32,54 +32,51 @@ global _start
 
 ; Sprawdza, czy 'r' osiągnęło punkt obrotowy.
 %macro CHECK_CYCLE_POINTS 0
-  mov r8b, r14b 
-  inc r8b
-  cmp r8b, 41
-  cmova r8d, r9d
-  cmp r15b, 27
-  cmove r14d, r8d
-  cmp r15b, 33
-  cmove r14d, r8d
-  cmp r15b, 35
-  cmove r14d, r8d
+  mov r8d, r14d ; Wartość bębenka L.
+  inc r8d
+  cmp r8d, 41
+  cmova r8d, r9d ; Jeśli wyszedł poza zakres, przypisz wartość 0.
+  cmp r15d, 27
+  cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'L'.
+  cmp r15d, 33
+  cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'R'.
+  cmp r15d, 35
+  cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'T'.
 %endmacro
 
 ; Szyfruje bufor.
 %macro CYPHER 0
-  xor r9, r9
   xor ebx, ebx
+  xor r9d, r9d   ; Potrzebujemy wartości 0 na rejestrze, gdy bębenek się przekręci.
 %%buff_loop:
-  movzx ebp, byte [buffer + ebx]
   cmp rbx, rax
-  je %%exit
-  cmp bpl, 10
-  je %%end_loop
+  je %%exit ; Zaszyfrowano wszystkie wczytane bajty, nie ma nic więcej do zrobienia.
+  movzx ebp, byte [buffer + ebx] ; Kolejny znak do zaszyfrowania.
   call check_sign
-  inc r15b
-  cmp r15b, 41
-  cmova r15d, r9d
+  inc r15d  ; Obracanie bębenka R.
+  cmp r15d, 41
+  cmova r15d, r9d ; Przypisz bębenkowi R wartość 0, jeśli wyszedł poza zakres.
   CHECK_CYCLE_POINTS
-  mov r12b, r15b
+  mov r12d, r15d  ; Wartość bębenka R.
   call q_shift
-  mov r13, [rsp + 8 * 3]
+  mov r13, [rsp + 8 * 3] ; Adres permutacji R.
   movzx ebp, byte [r13 + rbp - '1']
   call q_shift_rev
-  mov r12b, r14b
+  mov r12d, r14d ; Wartość bębenka L.
   call q_shift
-  mov r13, [rsp + 8 * 2]
+  mov r13, [rsp + 8 * 2] ; Adres permutacji L.
   movzx ebp, byte [r13 + rbp - '1']
   call q_shift_rev
-  mov r13, [rsp + 8 * 4]
+  mov r13, [rsp + 8 * 4] ; Adres permutacji T.
   movzx ebp, byte [r13 + rbp - '1']
   call q_shift
   movzx ebp, byte [rev_L + rbp - '1']
   call q_shift_rev
-  mov r12b, r15b
+  mov r12d, r15d ; Wartość bębenka R.
   call q_shift
   movzx ebp, byte [rev_R + rbp - '1']
   call q_shift_rev
-%%end_loop:
-  mov byte [buffer + ebx], bpl
+  mov byte [buffer + ebx], bpl ; Zapisz zaszyfrowany znak w bufferze.
   inc ebx
   jmp %%buff_loop
 %%exit:
@@ -88,15 +85,15 @@ global _start
 ; Sprawdza, czy permutacja T jest złożeniem 21 cykli dwuelementowych.
 %macro CHECK_T_PERMUTATION 0
   xor esi, esi
-  mov esi, '1'
+  mov esi, LOWER_BOUND
 %%rev_Loop:
-  cmp esi, 'Z'
-  ja %%exit
+  cmp esi, UPPER_BOUND
+  ja %%exit   ; Nie ma nic więcej do sprawdzenia.
   cmp sil, byte [r14 + rsi - '1']
-  je error_exit
+  je error_exit ; Permutacja T zawiera punkt stały.
   movzx rcx, byte [r14 + rsi - '1']
   cmp sil, byte [r14 + rcx - '1']
-  jne error_exit
+  jne error_exit ; Dany cykl nie jest dwuelementowy.
   inc esi
   jmp %%rev_Loop
 %%exit:
@@ -110,87 +107,84 @@ section .bss
 
 section .text
 q_shift:
-  add bpl, r12b
+  add ebp, r12d ; Dodaj wartość bębenka L lub R do szyfrowanego znaku.
   mov ecx, ebp
-  sub ecx, 42
-  cmp bpl, UPPER_BOUND
-  cmova ebp, ecx
+  sub ecx, 42  ; Odejmij 'Z' i dodaj '0' = odejmij 42.
+  cmp ebp, UPPER_BOUND
+  cmova ebp, ecx ; Przepisz nową wartość, gdy szyfrowany znak wyszedł poza skalę.
   ret
 q_shift_rev:
-  sub bpl, r12b
+  sub ebp, r12d ; Odejmij wartość bębenka L lub R od szyfrowanego znaku.
   mov ecx, ebp
-  add ecx, 42
-  cmp bpl, LOWER_BOUND
-  cmovb ebp, ecx
+  add ecx, 42  ; Dodaj 'Z' i odejmij '0' = dodaj 42.
+  cmp ebp, LOWER_BOUND
+  cmovb ebp, ecx ; Przepisz nową wartość, gdy szyfrowany znak wyszedł poza skalę.
   ret
-reverse_perm: ; zmiana
+reverse_perm: ; Sprawdza poprawność permutacji i zapisuje jej odwrotność.
   mov r8d, LOWER_BOUND
 .arg_loop:
-  movzx ebp, byte [r14 + r8 - '1']
-  test ebp, ebp ; a moze test bpl, bpl
-  jz .end
+  movzx rbp, byte [r14 + r8 - '1']
+  test ebp, ebp 
+  jz .end               ; Napotkano znak końca napisu, koniec permutacji.
   call check_sign
-  sub ebp, LOWER_BOUND
-  cmp byte [r15 + rbp], 0
-  jne error_exit
-  mov [r15 + rbp], r8b
+  cmp byte [r15 + rbp - '1'], 0
+  jne error_exit        ; Dwa takie same znaki w permutacji.
+  mov byte [r15 + rbp - '1'], r8b ; Wstawiamy kolejny znak do odwrotności permutacji.
   inc r8d
   jmp .arg_loop
 .end:
   cld
   xor al, al  ; Szukaj zera.
-  mov ecx, 42
-  mov rdi, r15
-  repne scasb
+  mov ecx, 42 ; Ogranicz przeszukiwanie do 42 znaków.
+  mov rdi, r15 ; Ustaw adres, od którego rozpocząć szukanie.
+  repne scasb  ; Szukaj bajtu o wartości 0.
   sub rdi, r15
   cmp rdi, 42
-  jne error_exit
+  jne error_exit ; Permutacja nie ma 42 znaków.
   ret
 check_sign:
   cmp ebp, LOWER_BOUND
-  jb error_exit
+  jb error_exit         ; Znak <= '1'.
   cmp ebp, UPPER_BOUND
-  ja error_exit
+  ja error_exit         ; Znak >= 'Z'.
   ret
 _start:
-  cmp byte [rsp], ARGC ; Pod rsp mamy wskaźnik na argc.         
-  jne error_exit       ; Błędna liczba parametrów.
-  xor r8, r8
-  mov r14, [rsp + 8 * 2]
-  lea r15, [rev_L]
+  cmp byte [rsp], ARGC  ; Pod rsp mamy wskaźnik na argc.         
+  jne error_exit        ; Błędna liczba parametrów.
+  xor r8, r8            ; Wyczyść r8, potrzebne do procedury reverse_perm.
+  mov r14, [rsp + 8 * 2] ; Adres permutacji L.
+  lea r15, [rev_L]       ; Adres odwrotności permutacji L.
+  call reverse_perm      
+  mov r14, [rsp + 8 * 3] ; Adres permutacji R.
+  lea r15, [rev_R]       ; Adres odwrotności permutacji R.
   call reverse_perm
-  mov r14, [rsp + 8 * 3]
-  lea r15, [rev_R]
-  call reverse_perm
-  mov r14, [rsp + 8 * 4]
-  lea r15, [rev_T]
+  mov r14, [rsp + 8 * 4] ; Adres permutacji T.
+  lea r15, [rev_T]       ; Adres odwrotności permutacji T.
   call reverse_perm
   CHECK_T_PERMUTATION
-last_arg:
-  mov rsi, [rsp + 8 * 5]
-  movzx ebp, byte [rsi] ; a moze mov bpl, [rsi]????????
+  mov rsi, [rsp + 8 * 5] ; Adres klucza.
+  movzx ebp, byte [rsi] ; Początkowa pozycja bębenka L.
   call check_sign
   mov r14d, ebp
-  movzx ebp, byte [rsi + 1] ; tu moze tez???????????
+  movzx ebp, byte [rsi + 1] ; Początkowa pozycja bębenka R.
   call check_sign
   mov r15d, ebp
-  sub r14d, LOWER_BOUND
+  sub r14d, LOWER_BOUND     ; Zakres bębenków to 0 - 41.
   sub r15d, LOWER_BOUND
   cmp byte [rsi + 2], 0
-  jne error_exit
+  jne error_exit            ; Klucz ma więcej niż 2 elementy.
 io_loop:
   READ_INPUT
   test rax, rax
-  jz exit
-  xor r9d, r9d
+  jz exit                   ; Koniec danych do wczytania, zakończ wykonanie programu.
   CYPHER
   PRINT buffer, rbx
   jmp io_loop
-error_exit:
+error_exit: ; Zakończenie wykonania programu z kodem 1.
   mov eax, SYS_EXIT
   mov edi, 1
   syscall
-exit:
+exit:       ; Poprawne zakończenie programu.
   mov eax, SYS_EXIT
   xor edi, edi
   syscall
