@@ -1,18 +1,17 @@
-SYS_READ       equ 0
-SYS_WRITE      equ 1
-SYS_EXIT       equ 60
-STDIN          equ 0
-STDOUT         equ 1
-ARGC           equ 5
-LOWER_BOUND    equ 49 
-UPPER_BOUND    equ 90
-BUFFER_SIZE    equ 4096
-PERM_LENGTH    equ 42
-PIVOT_POINT_1  equ 27 ; 'L' - '1'
-PIVOT_POINT_2  equ 33 ; 'R' - '1'
-PIVOT_POINT_3  equ 35 ; 'T' - '1'
-CYLINDER_BOUND equ 41 ; Największa poprawna wartość bębenka.
-REAL_PERM_LEN  equ 43 ; Długość permutacji razem ze znakiem końca napisu.
+SYS_READ  equ 0
+SYS_WRITE equ 1
+SYS_EXIT  equ 60
+STDIN     equ 0
+STDOUT    equ 1
+ARGC      equ 5
+LOWER_B   equ 49
+UPPER_B   equ 90
+BUFF_SIZE equ 4096
+PERM_LEN  equ 42
+P_POINT_1 equ 27 ; 'L' - '1'
+P_POINT_2 equ 33 ; 'R' - '1'
+P_POINT_3 equ 35 ; 'T' - '1'
+ROT_MAX   equ 41 ; Największa poprawna wartość bębenka.
 
 ; Wykonanie programu zaczyna się od etyiety _start.
 global _start
@@ -31,26 +30,27 @@ global _start
 %macro READ_INPUT 0
   mov eax, SYS_READ
   mov edi, STDIN
-  mov rsi, buffer
-  mov rdx, BUFFER_SIZE
+  mov rsi, buffer ; Czytaj do bufora.
+  mov rdx, BUFF_SIZE
   syscall
 %endmacro
 
-; Sprawdza, czy 'r' osiągnęło punkt obrotowy.
-%macro CHECK_PIVOT_POINTS 0
+; Sprawdza, czy bębenek R osiągnął punkt obrotowy.
+; Wartość bębenka L znajduje się w rejestrze r14, a bębenka R w r15.
+%macro PIVOTS 0
   mov r8d, r14d ; Wartość bębenka L.
   inc r8d
-  cmp r8d, CYLINDER_BOUND
+  cmp r8d, ROT_MAX
   cmova r8d, r9d ; Jeśli wyszedł poza zakres, przypisz wartość 0.
-  cmp r15d, PIVOT_POINT_1
+  cmp r15d, P_POINT_1
   cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'L'.
-  cmp r15d, PIVOT_POINT_2
+  cmp r15d, P_POINT_2
   cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'R'.
-  cmp r15d, PIVOT_POINT_3
+  cmp r15d, P_POINT_3
   cmove r14d, r8d ; Obróć bębenek L, jeśli bębenek R osiągnął pozycję 'T'.
 %endmacro
 
-; Szyfruje bufor.
+; Szyfruje bufor, który znajduje się pod adresem [buffer].
 %macro CYPHER 0
   xor ebx, ebx   ; Licznik zaszyfrowanych znaków.
   xor r9d, r9d   ; Potrzebujemy wartości 0 na rejestrze, gdy bębenek się przekręci.
@@ -60,9 +60,9 @@ global _start
   movzx ebp, byte [buffer + ebx] ; Kolejny znak do zaszyfrowania.
   call check_sign
   inc r15d  ; Obracanie bębenka R.
-  cmp r15d, CYLINDER_BOUND
+  cmp r15d, ROT_MAX
   cmova r15d, r9d ; Przypisz bębenkowi R wartość 0, jeśli wyszedł poza zakres.
-  CHECK_PIVOT_POINTS
+  PIVOTS          ; Sprawdź punkty obrotowe.
   mov r12d, r15d  ; Wartość bębenka R.
   call q_shift
   mov r13, [rsp + 8 * 3] ; Adres permutacji R.
@@ -89,11 +89,12 @@ global _start
 %endmacro
 
 ; Sprawdza, czy permutacja T jest złożeniem 21 cykli dwuelementowych.
-%macro CHECK_T_PERMUTATION 0
+; Permutacja T znajduje się pod adresem w rejestrze r14.
+%macro T_PERM 0
   xor esi, esi
-  mov esi, LOWER_BOUND
+  mov esi, LOWER_B
 %%rev_Loop:
-  cmp esi, UPPER_BOUND
+  cmp esi, UPPER_B
   ja %%exit   ; Nie ma nic więcej do sprawdzenia.
   cmp sil, byte [r14 + rsi - '1']
   je error_exit ; Permutacja T zawiera punkt stały.
@@ -106,28 +107,28 @@ global _start
 %endmacro
 
 section .bss
-  buffer: resb BUFFER_SIZE
-  rev_L:  resb PERM_LENGTH
-  rev_R:  resb PERM_LENGTH
-  rev_T:  resb PERM_LENGTH
+  buffer: resb BUFF_SIZE
+  rev_L:  resb PERM_LEN
+  rev_R:  resb PERM_LEN
+  rev_T:  resb PERM_LEN
 
 section .text
 q_shift: ; Wykonuje cykliczne przesunięcie znaku w rejestrze ebp "w przód".
   add ebp, r12d ; Dodaj wartość bębenka L lub R do szyfrowanego znaku.
   mov ecx, ebp
-  sub ecx, PERM_LENGTH  ; Odejmij 'Z' i dodaj '0' = odejmij 42.
-  cmp ebp, UPPER_BOUND
+  sub ecx, PERM_LEN  ; Odejmij 'Z' i dodaj '0' = odejmij 42.
+  cmp ebp, UPPER_B
   cmova ebp, ecx ; Przepisz nową wartość, gdy szyfrowany znak wyszedł poza skalę.
   ret
 q_shift_rev: ; Wykonuje cykliczne przesunięcie znaku w rejestrze ebp "w tył".
   sub ebp, r12d ; Odejmij wartość bębenka L lub R od szyfrowanego znaku.
   mov ecx, ebp
-  add ecx, PERM_LENGTH  ; Dodaj 'Z' i odejmij '0' = dodaj 42.
-  cmp ebp, LOWER_BOUND
+  add ecx, PERM_LEN  ; Dodaj 'Z' i odejmij '0' = dodaj 42.
+  cmp ebp, LOWER_B
   cmovb ebp, ecx ; Przepisz nową wartość, gdy szyfrowany znak wyszedł poza skalę.
   ret
 reverse_perm: ; Sprawdza poprawność permutacji, której adres jest w r14 i zapisuje jej odwrotność pod adres z r15.
-  mov r8d, LOWER_BOUND
+  mov r8d, LOWER_B
 .arg_loop:
   movzx rbp, byte [r14 + r8 - '1']
   test ebp, ebp 
@@ -139,13 +140,13 @@ reverse_perm: ; Sprawdza poprawność permutacji, której adres jest w r14 i zap
   inc r8d
   jmp .arg_loop
 .end:
-  cmp r8d, UPPER_BOUND
+  cmp r8d, UPPER_B
   jbe error_exit
   ret
 check_sign: ; Sprawdza, czy znak w rejestrze ebp jest dozwolonym znakiem.
-  cmp ebp, LOWER_BOUND
+  cmp ebp, LOWER_B
   jb error_exit         ; Znak <= '1'.
-  cmp ebp, UPPER_BOUND
+  cmp ebp, UPPER_B
   ja error_exit         ; Znak >= 'Z'.
   ret
 _start:
@@ -161,7 +162,7 @@ _start:
   mov r14, [rsp + 8 * 4] ; Adres permutacji T.
   lea r15, [rev_T]       ; Adres odwrotności permutacji T.
   call reverse_perm
-  CHECK_T_PERMUTATION
+  T_PERM                 ; Sprawdź poprawność permutacji T.
   mov rsi, [rsp + 8 * 5] ; Adres klucza.
   movzx ebp, byte [rsi] ; Początkowa pozycja bębenka L.
   call check_sign
@@ -169,8 +170,8 @@ _start:
   movzx ebp, byte [rsi + 1] ; Początkowa pozycja bębenka R.
   call check_sign
   mov r15d, ebp
-  sub r14d, LOWER_BOUND     ; Zakres bębenków to 0 - 41.
-  sub r15d, LOWER_BOUND
+  sub r14d, LOWER_B     ; Zakres bębenka L to 0 - 41.
+  sub r15d, LOWER_B     ; Zakres bębenka R to 0 - 41.
   cmp byte [rsi + 2], 0
   jne error_exit            ; Klucz ma więcej niż 2 elementy.
 io_loop:
