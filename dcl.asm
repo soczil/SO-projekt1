@@ -6,11 +6,11 @@ STDOUT    equ 1
 ARGC      equ 5
 LOWER_B   equ 49
 UPPER_B   equ 90
-BUFF_SIZE equ 4096
-PERM_LEN  equ 42
 P_POINT_1 equ 27                        ; Punkt obrotowy: 'L' - '1'
 P_POINT_2 equ 33                        ; Punkt obrotowy: 'R' - '1'
 P_POINT_3 equ 35                        ; Punkt obrotowy: 'T' - '1'
+BUFF_SIZE equ 4096
+PERM_LEN  equ 42
 ROT_MAX   equ 41                        ; Największa poprawna wartość bębenka.
 
 ; Wykonanie programu zaczyna się od etyiety _start.
@@ -141,7 +141,7 @@ reverse_perm:                           ; Sprawdza poprawność permutacji, któ
   jmp     .arg_loop
 .end:
   cmp     r8d, UPPER_B
-  jbe     error_exit
+  jbe     error_exit                    ; Permutacja jest krótsza niż 42 znaki.
   ret
 check_sign:                             ; Sprawdza, czy znak w rejestrze ebp jest dozwolonym znakiem.
   cmp     ebp, LOWER_B
